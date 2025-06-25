@@ -230,22 +230,147 @@ def scrape_posts(post_links):
         except:
             pass
         
-        # 获取点赞数
+        # 获取点赞数 - 重新设计
         likes = ""
         try:
-            # 查找包含数字的文本
-            number_texts = []
-            elements = driver.find_elements(By.XPATH, "//*[text()[contains(., '万') or contains(., 'k') or contains(., 'K') or contains(., ',')]]")
-            for elem in elements:
-                text = elem.text.strip()
-                if any(char.isdigit() for char in text) and len(text) < 20:
-                    number_texts.append(text)
+            print("  开始查找点赞数...")
             
-            if number_texts:
-                likes = number_texts[0]  # 取第一个符合条件的
+            # 等待页面完全加载
+            time.sleep(3)
+            
+            # 方法1: 查找心形图标附近的数字
+            try:
+                # 查找所有可能的心形图标元素
+                heart_selectors = [
+                    "svg[aria-label*='like']",
+                    "svg[aria-label*='Like']", 
+                    "svg[aria-label*='赞']",
+                    "*[data-testid*='like']",
+                    "button[aria-label*='like']",
+                    "button[aria-label*='Like']"
+                ]
                 
-        except:
-            pass
+                for selector in heart_selectors:
+                    elements = driver.find_elements(By.CSS_SELECTOR, selector)
+                    for heart_elem in elements:
+                        # 查找心形图标的父元素或兄弟元素中的数字
+                        parent = heart_elem.find_element(By.XPATH, "./..")
+                        siblings = parent.find_elements(By.XPATH, "./*")
+                        
+                        for sibling in siblings:
+                            text = sibling.text.strip()
+                            # 匹配数字格式（包括带逗号、万、k等）
+                            if re.match(r'^\d+[,.]?\d*[万千kKmM]?$', text):
+                                likes = text
+                                print(f"  从心形图标附近找到点赞数: {likes}")
+                                break
+                        if likes:
+                            break
+                    if likes:
+                        break
+            except Exception as e:
+                print(f"  方法1失败: {e}")
+            
+            # 方法2: 查找按钮的aria-label
+            if not likes:
+                try:
+                    buttons = driver.find_elements(By.TAG_NAME, "button")
+                    for button in buttons:
+                        aria_label = button.get_attribute("aria-label")
+                        if aria_label and ("like" in aria_label.lower() or "赞" in aria_label):
+                            # 从aria-label中提取数字
+                            numbers = re.findall(r'([\d,]+)', aria_label)
+                            if numbers:
+                                likes = numbers[0]
+                                print(f"  从按钮aria-label找到点赞数: {likes}")
+                                break
+                except Exception as e:
+                    print(f"  方法2失败: {e}")
+            
+            # 方法3: 查找包含特定关键词的span元素
+            if not likes:
+                try:
+                    spans = driver.find_elements(By.TAG_NAME, "span")
+                    for span in spans:
+                        text = span.text.strip()
+                        # 查找包含"赞"、"likes"等关键词的文本
+                        if any(keyword in text.lower() for keyword in ["个赞", "likes", "like"]):
+                            numbers = re.findall(r'([\d,]+)', text)
+                            if numbers:
+                                likes = numbers[0]
+                                print(f"  从span文本找到点赞数: {likes}")
+                                break
+                except Exception as e:
+                    print(f"  方法3失败: {e}")
+            
+            # 方法4: 通过JavaScript获取
+            if not likes:
+                try:
+                    # 使用JavaScript查找页面中的数字
+                    js_script = """
+                    var numbers = [];
+                    var allElements = document.querySelectorAll('*');
+                    for (var i = 0; i < allElements.length; i++) {
+                        var text = allElements[i].textContent.trim();
+                        if (/^\\d+[,.]?\\d*[万千kKmM]?$/.test(text) && text.length < 10) {
+                            var rect = allElements[i].getBoundingClientRect();
+                            // 只取页面上半部分的数字
+                            if (rect.top < window.innerHeight * 0.6) {
+                                numbers.push(text);
+                            }
+                        }
+                    }
+                    return numbers.slice(0, 5); // 返回前5个数字
+                    """
+                    numbers = driver.execute_script(js_script)
+                    if numbers:
+                        # 取第一个数字作为点赞数
+                        likes = numbers[0]
+                        print(f"  通过JavaScript找到点赞数: {likes}")
+                except Exception as e:
+                    print(f"  方法4失败: {e}")
+            
+            # 方法5: 查找所有数字，基于位置判断
+            if not likes:
+                try:
+                    all_elements = driver.find_elements(By.XPATH, "//*[text()]")
+                    potential_likes = []
+                    
+                    for elem in all_elements:
+                        text = elem.text.strip()
+                        if re.match(r'^\d+[,.]?\d*[万千kKmM]?$', text) and len(text) < 8:
+                            try:
+                                # 获取元素位置
+                                location = elem.location
+                                size = elem.size
+                                
+                                # 点赞数通常在页面左侧或中间，且在上半部分
+                                window_height = driver.get_window_size()['height']
+                                window_width = driver.get_window_size()['width']
+                                
+                                if (location['y'] < window_height * 0.6 and 
+                                    location['x'] < window_width * 0.8):
+                                    potential_likes.append((text, location['y']))
+                            except:
+                                pass
+                    
+                    # 按y坐标排序，取最上面的数字
+                    if potential_likes:
+                        potential_likes.sort(key=lambda x: x[1])
+                        likes = potential_likes[0][0]
+                        print(f"  基于位置找到点赞数: {likes}")
+                        
+                except Exception as e:
+                    print(f"  方法5失败: {e}")
+            
+            # 如果所有方法都失败，设置为未知
+            if not likes:
+                likes = "未知"
+                print("  所有方法都无法获取点赞数")
+                
+        except Exception as e:
+            print(f"  获取点赞数总体出错: {e}")
+            likes = "获取失败"
         
         # 输出调试信息
         print(f"  用户名: '{username}'")
