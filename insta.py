@@ -7,14 +7,14 @@ import time
 import json
 import re
 
-# ----------- 你的账号信息（自己填上）-----------
+# ----------- ログイン情報を入力-----------
 USERNAME = "08615201766581"
 PASSWORD = "After592025"
 # ---------------------------------------------
 
-# 设置浏览器选项 
+# ブラウザ設定 
 options = webdriver.ChromeOptions()
-options.add_argument("--start-maximized")  # 最大化窗口，方便加载元素
+options.add_argument("--start-maximized")  # ウィンドウを最大化
 driver = webdriver.Chrome(options=options)
 
 def login_instagram():
@@ -29,16 +29,16 @@ def login_instagram():
     password_input.send_keys(Keys.ENTER)
 
     print("登录中...")
-    time.sleep(7)  # 等待登录完成
+    time.sleep(7)  # ログイン完了までしばらく待つ
 
 def go_to_tag_page(tag="ちいかわ"):
     url = f"https://www.instagram.com/explore/tags/{tag}/"
     driver.get(url)
-    print(f"跳转到标签页 #{tag}...")
+    print(f"ハッシュタグページへ移動中 #{tag}...")
     time.sleep(5)
 
-def collect_post_links(limit=3):
-    print("开始收集帖子的链接...")
+def collect_post_links(limit=10):
+    print("投稿のリンク収集中...")
     links = set()
     last_height = driver.execute_script("return document.body.scrollHeight")
     
@@ -56,64 +56,64 @@ def collect_post_links(limit=3):
         if new_height == last_height:
             break
         last_height = new_height
-        print(f"已收集 {len(links)} 条链接")
+        print(f" {len(links)} 件のリンクを取得した")
     
-    print("链接收集完毕！")
+    print("リンクの取得が完了")
     return list(links)
 
 def scrape_posts(post_links):
-    print("开始抓取帖子内容...")
+    print("投稿内容のスクレイピングを開始...")
     data = []
     for idx, link in enumerate(post_links):
-        print(f"抓取第 {idx + 1}/{len(post_links)} 篇：{link}")
+        print(f" {idx + 1}/{len(post_links)} 件目を取得中：{link}")
         driver.get(link)
         
-        # 增加更长的等待时间并模拟人类行为
+        # 少し長めに待機して人間らしい操作を再現する
         time.sleep(5)
         
-        # 模拟向下滚动，触发内容加载
+        # ページをスクロールしてコンテンツを読み込み
         driver.execute_script("window.scrollTo(0, 500);")
         time.sleep(2)
         driver.execute_script("window.scrollTo(0, 0);")
         time.sleep(3)
         
-        # 等待页面完全加载
+        # 等待页面完全加载ページが完全に読み込まれるのを待っている
         wait = WebDriverWait(driver, 30)
         
-        # 首先检查页面是否正常加载
+        # ページが正しく表示されているか確認中
         page_loaded = False
         try:
-            # 等待任意一个常见元素出现
+            # よく使われる要素の表示を待っている
             wait.until(EC.any_of(
                 EC.presence_of_element_located((By.TAG_NAME, "article")),
                 EC.presence_of_element_located((By.TAG_NAME, "main")),
                 EC.presence_of_element_located((By.CSS_SELECTOR, "[role='main']"))
             ))
             page_loaded = True
-            print("  页面加载成功")
+            print(" ページの読み込み成功")
         except:
-            print("  页面加载可能有问题，尝试刷新...")
+            print(" ページの読み込みに失敗した可能性があるため、リロードする...")
             driver.refresh()
             time.sleep(10)
             try:
                 wait.until(EC.presence_of_element_located((By.TAG_NAME, "main")))
                 page_loaded = True
-                print("  刷新后页面加载成功")
+                print(" リロード後、ページの読み込みに成功した ")
             except:
-                print("  页面仍然无法正常加载，跳过此帖子")
+                print(" ページが正しく読み込めなかったため、この投稿はスキップする")
                 continue
         
         if not page_loaded:
             continue
             
-        # 打印页面HTML结构用于调试
-        print("  正在分析页面结构...")
+        # 打デバッグのため、HTML構造を出力する
+        print("  ページ構造を解析中...")
         try:
-            # 获取页面标题，确认我们在正确的页面
+            # タイトルを取得して正しいページか確認する
             page_title = driver.title
             print(f"  页面标题: {page_title}")
             
-            # 查找所有可能的容器元素
+            # 考えられる全てのコンテナ要素を探す
             containers = ['main', 'article', 'section', 'div[role="main"]']
             main_content = None
             
@@ -122,43 +122,43 @@ def scrape_posts(post_links):
                     elements = driver.find_elements(By.CSS_SELECTOR, container)
                     if elements:
                         main_content = elements[0]
-                        print(f"  找到主容器: {container}")
+                        print(f"  メインコンテナを見つけた: {container}")
                         break
                 except:
                     continue
             
             if not main_content:
-                print("  未找到主容器，尝试获取body内容...")
+                print(" メインコンテナが見つからないため、body要素から取得を試す...")
                 main_content = driver.find_element(By.TAG_NAME, "body")
             
         except Exception as e:
-            print(f"  页面分析出错: {e}")
+            print(f" ページ解析中にエラーが発生した: {e}")
             continue
         
-        # 获取用户名 - 简化方法
+        # ユーザー名の取得
         username = ""
         try:
-            # 从URL中提取用户名（备选方案）
+            # URLからユーザー名を取得
             url_parts = link.split('/')
             if len(url_parts) > 3:
-                # 尝试多种方法获取用户名
+                # ユーザー名を取得するために複数の方法を試す
                 username_methods = [
-                    # 方法1: 查找所有链接，找用户名模式
+                    # 方法1: リンクからユーザー名を探す
                     lambda: [a.get_attribute('href') for a in driver.find_elements(By.TAG_NAME, 'a') 
                             if a.get_attribute('href') and '/' in a.get_attribute('href') and '/p/' not in a.get_attribute('href')],
-                    # 方法2: 查找所有文本，找@开头的
+                    # 方法2: @から始まるテキストを探す
                     lambda: [elem.text for elem in driver.find_elements(By.XPATH, "//*[starts-with(text(), '@')]")],
-                    # 方法3: 查找title属性
+                    # 方法3: title属性から取得する
                     lambda: [elem.get_attribute('title') for elem in driver.find_elements(By.XPATH, "//*[@title]")]
                 ]
                 
                 for method in username_methods:
                     try:
                         results = method()
-                        for result in results[:5]:  # 只检查前5个结果
+                        for result in results[:5]:  # 上位5件のみをチェックする
                             if result and isinstance(result, str):
                                 if result.startswith('@'):
-                                    username = result[1:]  # 移除@符号
+                                    username = result[1:]  # @記号を取り除く
                                     break
                                 elif '/' in result and not '/p/' in result:
                                     parts = result.strip('/').split('/')
@@ -171,16 +171,16 @@ def scrape_posts(post_links):
                         continue
                         
         except Exception as e:
-            print(f"  获取用户名出错: {e}")
+            print(f"  ユーザー名の取得中にエラーが発生した: {e}")
         
-        # 获取内容 - 简化方法
+        # 投稿内容の取得
         content = ""
         full_text = ""
         try:
-            # 获取所有文本内容，然后筛选
+            # すべてのテキストを取得して、フィルタリングする
             all_texts = []
             
-            # 查找所有可能包含文本的元素
+            # テキストが含まれていそうな要素をすべてチェックする
             text_elements = driver.find_elements(By.XPATH, "//*[string-length(normalize-space(text())) > 5]")
             
             for elem in text_elements:
@@ -191,24 +191,24 @@ def scrape_posts(post_links):
                 except:
                     continue
             
-            print(f"  找到 {len(all_texts)} 段文本")
+            print(f" {len(all_texts)} 件のテキストを見つけた")
             
-            # 筛选出最可能是内容的文本（长度适中，包含有意义内容）
+            # 投稿本文らしいテキストを選別中（適度な長さ・意味のある内容）
             for text in all_texts:
                 if 20 < len(text) < 500 and not text.isdigit():
-                    # 检查是否包含日文字符或常见内容特征
+                    # 日本語やハッシュタグなどが含まれているかチェックする
                     if any(ord(char) > 127 for char in text) or '#' in text:
                         full_text = text
                         break
             
-            # 如果没找到，取最长的文本
+            # 適切なものが見つからなければ、最長のテキストを使用する
             if not full_text and all_texts:
                 full_text = max(all_texts, key=len)
                 
         except Exception as e:
-            print(f"  获取内容出错: {e}")
+            print(f"  投稿内容の取得中にエラーが発生した: {e}")
         
-        # 分离内容和标签
+        # 本文とハッシュタグを分離する
         if "#" in full_text:
             parts = full_text.split('#', 1)
             content = parts[0].strip()
@@ -218,7 +218,7 @@ def scrape_posts(post_links):
             content = full_text
             tags = []
         
-        # 获取时间戳
+        # 投稿日時を取得する
         timestamp = ""
         try:
             time_elements = driver.find_elements(By.TAG_NAME, "time")
@@ -230,17 +230,17 @@ def scrape_posts(post_links):
         except:
             pass
         
-        # 获取点赞数 - 重新设计
+        # いいね数を取得する
         likes = ""
         try:
-            print("  开始查找点赞数...")
+            print("  いいね数の検索を開始する...")
             
             # 等待页面完全加载
             time.sleep(3)
             
-            # 方法1: 查找心形图标附近的数字
+            # 方法1: ハートアイコン付近の数字を探す
             try:
-                # 查找所有可能的心形图标元素
+                # 考えられるすべてのハートアイコン要素を探す
                 heart_selectors = [
                     "svg[aria-label*='like']",
                     "svg[aria-label*='Like']", 
@@ -253,60 +253,60 @@ def scrape_posts(post_links):
                 for selector in heart_selectors:
                     elements = driver.find_elements(By.CSS_SELECTOR, selector)
                     for heart_elem in elements:
-                        # 查找心形图标的父元素或兄弟元素中的数字
+                        # ハートアイコンの親要素または兄弟要素から数字を探す
                         parent = heart_elem.find_element(By.XPATH, "./..")
                         siblings = parent.find_elements(By.XPATH, "./*")
                         
                         for sibling in siblings:
                             text = sibling.text.strip()
-                            # 匹配数字格式（包括带逗号、万、k等）
+                            # 数字のフォーマットにマッチするかを確認する（カンマ・万・kなど含む）
                             if re.match(r'^\d+[,.]?\d*[万千kKmM]?$', text):
                                 likes = text
-                                print(f"  从心形图标附近找到点赞数: {likes}")
+                                print(f"  ハートアイコン周辺からいいね数を取得した: {likes}")
                                 break
                         if likes:
                             break
                     if likes:
                         break
             except Exception as e:
-                print(f"  方法1失败: {e}")
+                print(f"  方法1は失败した: {e}")
             
-            # 方法2: 查找按钮的aria-label
+            # 方法2: ボタンのaria-labelを検索する
             if not likes:
                 try:
                     buttons = driver.find_elements(By.TAG_NAME, "button")
                     for button in buttons:
                         aria_label = button.get_attribute("aria-label")
                         if aria_label and ("like" in aria_label.lower() or "赞" in aria_label):
-                            # 从aria-label中提取数字
+                            # aria-labelから数字を抽出する
                             numbers = re.findall(r'([\d,]+)', aria_label)
                             if numbers:
                                 likes = numbers[0]
-                                print(f"  从按钮aria-label找到点赞数: {likes}")
+                                print(f"  ボタンのaria-labelからいいね数を取得した: {likes}")
                                 break
                 except Exception as e:
-                    print(f"  方法2失败: {e}")
+                    print(f"  方法2は失败した: {e}")
             
-            # 方法3: 查找包含特定关键词的span元素
+            # 方法3: 特定のキーワードを含むspan要素を検索する
             if not likes:
                 try:
                     spans = driver.find_elements(By.TAG_NAME, "span")
                     for span in spans:
                         text = span.text.strip()
-                        # 查找包含"赞"、"likes"等关键词的文本
+                        # 「赞」「likes」などのキーワードを含むテキストを探す
                         if any(keyword in text.lower() for keyword in ["个赞", "likes", "like"]):
                             numbers = re.findall(r'([\d,]+)', text)
                             if numbers:
                                 likes = numbers[0]
-                                print(f"  从span文本找到点赞数: {likes}")
+                                print(f" span内のテキストからいいね数を取得した: {likes}")
                                 break
                 except Exception as e:
-                    print(f"  方法3失败: {e}")
+                    print(f"  方法3は失败した: {e}")
             
             # 方法4: 通过JavaScript获取
             if not likes:
                 try:
-                    # 使用JavaScript查找页面中的数字
+                    # JavaScriptを使用してページ内の数字を取得する
                     js_script = """
                     var numbers = [];
                     var allElements = document.querySelectorAll('*');
@@ -314,23 +314,23 @@ def scrape_posts(post_links):
                         var text = allElements[i].textContent.trim();
                         if (/^\\d+[,.]?\\d*[万千kKmM]?$/.test(text) && text.length < 10) {
                             var rect = allElements[i].getBoundingClientRect();
-                            // 只取页面上半部分的数字
+                            // ページの上半分にある数字のみを対象にする
                             if (rect.top < window.innerHeight * 0.6) {
                                 numbers.push(text);
                             }
                         }
                     }
-                    return numbers.slice(0, 5); // 返回前5个数字
+                    return numbers.slice(0, 5); // 上位5つの数字を返す
                     """
                     numbers = driver.execute_script(js_script)
                     if numbers:
-                        # 取第一个数字作为点赞数
+                        # 最初に見つかった数字をいいね数として使用する
                         likes = numbers[0]
-                        print(f"  通过JavaScript找到点赞数: {likes}")
+                        print(f"  JavaScriptを使っていいね数を取得した: {likes}")
                 except Exception as e:
-                    print(f"  方法4失败: {e}")
+                    print(f"  方法4は失败した: {e}")
             
-            # 方法5: 查找所有数字，基于位置判断
+            # 方法5: 全体の数字を探し、位置に基づいて判断する
             if not likes:
                 try:
                     all_elements = driver.find_elements(By.XPATH, "//*[text()]")
@@ -340,11 +340,11 @@ def scrape_posts(post_links):
                         text = elem.text.strip()
                         if re.match(r'^\d+[,.]?\d*[万千kKmM]?$', text) and len(text) < 8:
                             try:
-                                # 获取元素位置
+                                # 要素の位置を取得する
                                 location = elem.location
                                 size = elem.size
                                 
-                                # 点赞数通常在页面左侧或中间，且在上半部分
+                                # いいね数は通常、ページの左または中央、かつ上部に表示されることが多い
                                 window_height = driver.get_window_size()['height']
                                 window_width = driver.get_window_size()['width']
                                 
@@ -354,32 +354,32 @@ def scrape_posts(post_links):
                             except:
                                 pass
                     
-                    # 按y坐标排序，取最上面的数字
+                    # y座標で並べ替えて、一番上の数字を選ぶ
                     if potential_likes:
                         potential_likes.sort(key=lambda x: x[1])
                         likes = potential_likes[0][0]
-                        print(f"  基于位置找到点赞数: {likes}")
+                        print(f"  位置情報に基づいていいね数を特定した: {likes}")
                         
                 except Exception as e:
-                    print(f"  方法5失败: {e}")
+                    print(f"  方法5は失败した: {e}")
             
-            # 如果所有方法都失败，设置为未知
+            # すべての方法で失敗した場合、「不明」とする
             if not likes:
-                likes = "未知"
-                print("  所有方法都无法获取点赞数")
+                likes = "不明"
+                print("  どの方法でもいいね数が取得できませんでした")
                 
         except Exception as e:
-            print(f"  获取点赞数总体出错: {e}")
-            likes = "获取失败"
+            print(f"  いいね数の取得中にエラーが発生した: {e}")
+            likes = "取得失敗"
         
-        # 输出调试信息
-        print(f"  用户名: '{username}'")
-        print(f"  内容长度: {len(content)}")
-        print(f"  标签数量: {len(tags)}")
-        print(f"  点赞数: '{likes}'")
-        print(f"  时间戳: '{timestamp}'")
+        # デバッグ情報を出力する
+        print(f"  ユーザー名: '{username}'")
+        print(f"  本文の長さ: {len(content)}")
+        print(f"  ハッシュタグの数: {len(tags)}")
+        print(f"  いいね数: '{likes}'")
+        print(f"  投稿日時: '{timestamp}'")
         if full_text:
-            print(f"  原始文本预览: '{full_text[:100]}...'")
+            print(f"  原文プレビュー: '{full_text[:100]}...'")
         
         data.append({
             "url": link,
@@ -391,24 +391,24 @@ def scrape_posts(post_links):
             "full_text": full_text
         })
         
-        # 每个帖子之间增加延迟，避免被检测
+        # 各投稿の間に遅延を入れて、Bot検出を回避する
         time.sleep(3)
 
-    print("数据抓取完毕")
+    print("データの取得が完了した")
     return data
 
 
 
 def save_to_json(data, filename="chiikawa_tag_data.json"):
-    print("正在保存数据...")
+    print("データを保存中...")
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    print(f"已保存 {len(data)} 条数据到 {filename}")
+    print(f" {len(data)} 件のデータを {filename}に保存した")
 
-# 执行流程
+# 処理を開始する
 login_instagram()
 go_to_tag_page("ちいかわ")
-post_links = collect_post_links(limit=3)
+post_links = collect_post_links(limit=10)
 data = scrape_posts(post_links)
 save_to_json(data)
 driver.quit()
